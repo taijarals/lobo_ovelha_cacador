@@ -10,4 +10,4 @@ Lista de integrantes do grupo pode ser encontrados em
 
 ## Instruções para executar:
 - Executar `make`
-- Executar `./build/game`
+- Executar `./bin/game`

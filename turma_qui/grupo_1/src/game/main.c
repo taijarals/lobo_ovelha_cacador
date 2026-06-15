@@ -7,7 +7,7 @@ int main(int argc, char const *argv[])
     printf("Hello, World!");
 
     if (!window_init()) {
-        printf("Not able to initialize the window");
+        fprintf(stderr, "Not able to initialize the window");
         return 1;
     }
 

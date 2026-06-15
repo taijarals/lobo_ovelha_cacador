@@ -1,4 +1,4 @@
-## Integrandes:
+## Integrantes:
 
 - Caique Augusto
 - Leonardo Pimentel

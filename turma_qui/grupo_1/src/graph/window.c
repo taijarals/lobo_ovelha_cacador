@@ -2,11 +2,11 @@
 
 int window_init() {
     InitWindow(800, 600, "Predator-Prey Ecosystem Simulator");
-    if (!IsWindowReady()) return false;
+    if (!IsWindowReady()) return 0;
     
     SetTargetFPS(60);
 
-    return true;
+    return 1;
 }
 void window_deinit() {
     CloseWindow();
