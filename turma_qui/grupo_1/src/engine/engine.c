@@ -1,311 +1,232 @@
-#include "../../include/engine/engine.h"
-
-#include <stdio.h>
+#include "engine/engine.h"
 #include <stdlib.h>
-#include <time.h>
+#include <string.h>
 #include <stdio.h>
 
-typedef struct {
-    Config cfg;
-    char *grid;
-    WorldStats stats;
+// Definindo os obstáculos exigidos pelo escopo
+#define CELL_TREE 'T'
+#define CELL_ROCK 'R'
 
-    size_t tick;
-    bool paused;
+// Variáveis de estado global (Estáticas para proteger o encapsulamento da sua engine)
+static WorldState current_state = {0, NULL, 0, 0};
+static WorldStats current_stats = {0, 0, 0, 0, 0, 0, 0};
+static bool is_running = false;
 
-    uint64_t rng_state;
-} World;
+// --- FUNÇÕES AUXILIARES ---
 
-static World *world = NULL;
-static WorldState state;
-static WorldStats stats;
-
-// Direções (cima, baixo, esquerda, direita
-static const int DX[8] = { 0,  0,  1, -1, };
-static const int DY[8] = {-1,  1,  0,  0, };
-
-// randomizer
-static uint64_t rng_next(void) {
-    uint64_t x = world->rng_state;
-    x ^= x << 13;
-    x ^= x >> 7;
-    x ^= x << 17;
-    world->rng_state = x;
-    return x;
+// Converte coordenadas 2D (x, y) para índice de array 1D
+static size_t get_index(size_t x, size_t y) {
+    return y * current_state.map_length_x + x;
 }
 
-static int rng_int(const int lo, const int hi) {
-    return lo + (int)(rng_next() % (uint64_t)(hi - lo + 1));
-}
+// Tenta adicionar células em posições vazias aleatórias
+static void spawn_randomly(size_t count, char type) {
+    size_t placed = 0;
+    // Prevenção de loop infinito caso o mapa esteja muito cheio
+    size_t max_attempts = count * 10; 
+    size_t attempts = 0;
 
-static bool in_bounds(const size_t x, const size_t y) {
-    return x >= 0 && y >= 0
-        && (size_t)x < world->cfg.map_length_x
-        && (size_t)y < world->cfg.map_length_y;
-}
-
-static int find_neighbours(const size_t cx, const size_t cy, char type, Pos *out) {
-    int n = 0;
-
-    const size_t width = world->cfg.map_length_x;
-    const size_t height = world->cfg.map_length_y;
-
-    for (int d = 0; d < 8; d++) {
-        const size_t nx = cx + DX[d];
-        const size_t ny = cy + DY[d];
-        if (!in_bounds(nx, ny)) continue;
-
-        const char c = world->grid[ny * height + width];
-        if (type == CELL_EMPTY) {
-            if (c == CELL_EMPTY) out[n++] = (Pos){nx, ny};
-        } else if (c == type) {
-            out[n++] = (Pos){nx, ny};
+    while (placed < count && attempts < max_attempts) {
+        size_t x = rand() % current_state.map_length_x;
+        size_t y = rand() % current_state.map_length_y;
+        
+        if (add_cell(x, y, type)) {
+            placed++;
         }
-    }
-    return n;
-}
-
-static void shuffle_pos(Pos *arr, int n) {
-    for (int i = n - 1; i > 0; i--) {
-        const int j = rng_int(0, i);
-        const Pos tmp = arr[i];
-        arr[i] = arr[j];
-        arr[j] = tmp;
+        attempts++;
     }
 }
 
+// --- IMPLEMENTAÇÃO DA API PÚBLICA ---
 
-static char *alloc_grid(const size_t width, const size_t height) {
-    char *grid = calloc(width * height, 1);
-    return grid;
+void set_seed(uint64_t seed) {
+    srand((unsigned int)seed);
 }
 
-static void free_grid(char *g) {
-    if (g) free(g);
+bool add_cell(size_t pos_x, size_t pos_y, char type) {
+    if (pos_x >= current_state.map_length_x || pos_y >= current_state.map_length_y) {
+        return false; // Fora dos limites
+    }
+    
+    size_t idx = get_index(pos_x, pos_y);
+    if (current_state.map[idx] == CELL_EMPTY) {
+        current_state.map[idx] = type;
+        
+        // Atualiza as estatísticas
+        if (type == CELL_WOLF) current_stats.wolf_count++;
+        else if (type == CELL_SHEEP) current_stats.sheep_count++;
+        else if (type == CELL_HUNTER) current_stats.hunter_count++;
+        
+        return true;
+    }
+    return false; // Célula já ocupada
 }
 
+void create_world(Config config) {
+    // 1. Controle de memória: libera o mapa antigo se existir
+    if (current_state.map != NULL) {
+        free(current_state.map);
+    }
 
-static void calculate_stats(void) {
-    size_t wolves = 0;
-    size_t sheep = 0;
-    size_t hunters = 0;
+    // 2. Validação da regra do HTML (Tamanho mínimo 5x5)
+    current_state.map_length_x = config.map_length_x < 5 ? 5 : config.map_length_x;
+    current_state.map_length_y = config.map_length_y < 5 ? 5 : config.map_length_y;
+    current_state.tick = 0;
+    
+    size_t total_cells = current_state.map_length_x * current_state.map_length_y;
+    
+    // Alocação dinâmica do mapa como vetor 1D
+    current_state.map = (char*)malloc(total_cells * sizeof(char));
+    memset(current_state.map, CELL_EMPTY, total_cells); 
+    memset(&current_stats, 0, sizeof(WorldStats));      
 
-    const size_t width = world->cfg.map_length_x;
-    const size_t height = world->cfg.map_length_y;
+    // 3. Cálculos de proporção baseados nas regras de negócio
+    size_t qtd_fac1 = (size_t)(total_cells * 0.12); // Ovelhas (12%)
+    size_t qtd_fac2 = (size_t)(total_cells * 0.12); // Lobos (12%)
+    size_t qtd_fac3 = (size_t)(total_cells * 0.05); // Caçadores (5%)
+    size_t qtd_obs  = (size_t)(total_cells * 0.10); // Obstáculos (10%)
 
-    for (size_t y = 0; y < height; y++)
-        for (size_t x = 0; x < width; x++) {
-            switch (world->grid[y * width + x]) {
-                case CELL_WOLF:   wolves++;  break;
-                case CELL_SHEEP:  sheep++;   break;
-                case CELL_HUNTER: hunters++; break;
-                default: break;
-            }
-        }
-    world->stats.tick = world->tick;
-    world->stats.wolf_count = wolves;
-    world->stats.sheep_count = sheep;
-    world->stats.hunter_count = hunters;
-}
-
-static void tick_cell(const size_t x, const size_t y) {
-
-}
-
-void create_world(const Config config) {
-    if (world) reset();
-    printf("Creating %lu x %lu world", config.map_length_x, config.map_length_y);
-
-    world = calloc(1, sizeof(World));
-    world->cfg    = config;
-    world->paused = false;
-    world->tick   = 0;
-    world->rng_state = (uint64_t)time(NULL) ^ 0xDEADBEEFCAFE1234ULL;
-    if (world->rng_state == 0) world->rng_state = 1;
-
-    const size_t width = config.map_length_x;
-    const size_t height  = config.map_length_y;
-
-    world->grid = alloc_grid(width, height);
-
-    for (size_t y = 0; y < height; y++)
-        for (size_t x = 0; x < width; x++)
-            world->grid[y * width + x] = CELL_EMPTY;
-
-    world->stats.tick = 0;
-    world->stats.wolf_count = 0;
-    world->stats.sheep_count = 0;
-    world->stats.hunter_count = 0;
-    world->stats.total_wolf_kills = 0;
-    world->stats.total_sheep_kills = 0;
-    world->stats.total_hunter_kills = 0;
+    // 4. Popula o mundo
+    spawn_randomly(qtd_obs / 2, CELL_TREE);
+    spawn_randomly(qtd_obs / 2, CELL_ROCK);
+    spawn_randomly(qtd_fac1, CELL_SHEEP);
+    spawn_randomly(qtd_fac2, CELL_WOLF);
+    spawn_randomly(qtd_fac3, CELL_HUNTER);
 }
 
 void reset(void) {
-    if (!world) return;
-    size_t width = world->cfg.map_length_x;
-    size_t height = world->cfg.map_length_y;
-
-    printf("Resetting %lu x %lu world", width, height);
-
-    free_grid(world->grid);
-    free(world);
-    world = NULL;
+    Config config = {current_state.map_length_x, current_state.map_length_y};
+    create_world(config);
 }
 
-void pause(void)  { if (world) world->paused = true;  }
-void resume(void) { if (world) world->paused = false; }
+void pause(void) { is_running = false; }
+void resume(void) { is_running = true; }
 
 void step(void) {
-    if (!world) return;
+    if (!is_running && current_state.tick > 0) return;
+    
+    current_state.tick++;
 
-    const size_t width = world->cfg.map_length_x;
-    const size_t height = world->cfg.map_length_y;
+    size_t total_cells = current_state.map_length_x * current_state.map_length_y;
+    
+    // Buffer dinâmico para registrar quem já andou neste turno
+    bool *has_moved = (bool*)calloc(total_cells, sizeof(bool));
+    if (!has_moved) return; 
 
-    for (size_t y = 0; y < height; y++)
-        for (size_t x = 0; x < width; x++)
-            tick_cell(x, y);
+    // Loop de varredura bidimensional 
+    for (size_t y = 0; y < current_state.map_length_y; y++) {
+        for (size_t x = 0; x < current_state.map_length_x; x++) {
+            size_t current_idx = get_index(x, y);
+            char entity = current_state.map[current_idx];
 
-    world->tick++;
-    calculate_stats();
+            // Confere se o caractere atual é móvel e se ainda não foi processado
+            if ((entity == CELL_WOLF || entity == CELL_SHEEP || entity == CELL_HUNTER) && !has_moved[current_idx]) {
+                
+                // Inteligência de movimentação (0=Cima, 1=Baixo, 2=Esq, 3=Dir)
+                int dir = rand() % 4;
+                size_t new_x = x;
+                size_t new_y = y;
+
+                // Restringe o movimento às bordas do mapa estipulado
+                if (dir == 0 && y > 0) new_y--;
+                else if (dir == 1 && y < current_state.map_length_y - 1) new_y++;
+                else if (dir == 2 && x > 0) new_x--;
+                else if (dir == 3 && x < current_state.map_length_x - 1) new_x++;
+
+                size_t new_idx = get_index(new_x, new_y);
+                char target = current_state.map[new_idx];
+
+                // Motor de Regras e Conflitos (Com a linha do IF corrigida!)
+                if (target == CELL_EMPTY) {
+                    // Célula vazia: apenas move
+                    current_state.map[new_idx] = entity;
+                    current_state.map[current_idx] = CELL_EMPTY;
+                    has_moved[new_idx] = true;
+                } 
+                else if (entity == CELL_WOLF && target == CELL_SHEEP) {
+                    // Predação: Lobo sobrepõe Ovelha
+                    current_state.map[new_idx] = CELL_WOLF;
+                    current_state.map[current_idx] = CELL_EMPTY;
+                    has_moved[new_idx] = true;
+                    current_stats.total_sheep_kills++;
+                    current_stats.sheep_count--;
+                }
+                else if (entity == CELL_HUNTER && target == CELL_WOLF) {
+                    // Proteção: Caçador sobrepõe Lobo
+                    current_state.map[new_idx] = CELL_HUNTER;
+                    current_state.map[current_idx] = CELL_EMPTY;
+                    has_moved[new_idx] = true;
+                    current_stats.total_wolf_kills++;
+                    current_stats.wolf_count--;
+                }
+                else if (entity == CELL_WOLF && target == CELL_HUNTER) {
+                    // Risco: Lobo tenta atacar Caçador e é eliminado
+                    current_state.map[current_idx] = CELL_EMPTY;
+                    current_stats.total_wolf_kills++;
+                    current_stats.wolf_count--;
+                }
+                else {
+                    // Condição de Bloqueio: Bateu numa árvore, pedra ou aliado.
+                    has_moved[current_idx] = true; 
+                }
+            }
+        }
+    }
+
+    // Limpeza de memória obrigatória. 
+    free(has_moved);
 }
 
-void run(const size_t n_steps) {
-    if (!world) return;
+void run(size_t n_steps) {
+    resume();
     for (size_t i = 0; i < n_steps; i++) {
-        if (world->paused) break;
         step();
     }
 }
 
-WorldState get_state(void) {
-    if (!world) return state;
+WorldState get_state(void) { return current_state; }
+WorldStats get_statistics(void) { return current_stats; }
 
-    state.tick = world->tick;
-    state.map_length_x = world->cfg.map_length_x;
-    state.map_length_y = world->cfg.map_length_y;
-    state.map = world->grid;
-
-    return state;
-}
-WorldStats get_statistics(void) { return stats; }
-
-bool add_cell(const size_t pos_x, const size_t pos_y, char type) {
-    if (!world) return false;
-
-    const size_t width = world->cfg.map_length_x;
-    const size_t height = world->cfg.map_length_y;
-
-    if (pos_x >= world->cfg.map_length_x || pos_y >= world->cfg.map_length_y)
-        return false;
-
-    world->grid[pos_y * width + pos_x] = type;
+// Implementação de manipulação de arquivos (Binários)
+bool save(const char *path) {
+    FILE *f = fopen(path, "wb"); 
+    if (!f) return false;
+    
+    // Salva configurações atuais e estatísticas
+    fwrite(&current_state.tick, sizeof(size_t), 1, f);
+    fwrite(&current_state.map_length_x, sizeof(size_t), 1, f);
+    fwrite(&current_state.map_length_y, sizeof(size_t), 1, f);
+    fwrite(&current_stats, sizeof(WorldStats), 1, f);
+    
+    // Salva todo o bloco de memória do mapa
+    size_t total_cells = current_state.map_length_x * current_state.map_length_y;
+    fwrite(current_state.map, sizeof(char), total_cells, f);
+    
+    fclose(f);
     return true;
 }
 
-bool save(const char *path) {
-    // if (!world) return false;
-    // FILE *f = fopen(path, "w");
-    // if (!f) return false;
-    //
-    // const size_t width = world->cfg.map_length_x;
-    // const size_t height = world->cfg.map_length_y;
-    //
-    // fprintf(f, "VERSION 1\n");
-    // fprintf(f, "SIZE %zu %zu\n", Wx, H);
-    // fprintf(f, "TICK %zu\n", world->tick);
-    // fprintf(f, "SEED %llu\n", (unsigned long long)world->rng_state);
-    // fprintf(f, "STATS");
-    // for (int i = 0; i < STAT_COUNT; i++) fprintf(f, " %zu", world->stats[i]);
-    // fprintf(f, "\n");
-    // fprintf(f, "MAP\n");
-    // for (usize_t y = 0; y < H; y++) {
-    //     for (usize_t x = 0; x < Wx; x++)
-    //         fputc(world->grid[y][x].type, f);
-    //     fputc('\n', f);
-    // }
-    // fprintf(f, "META\n");
-    // for (usize_t y = 0; y < H; y++)
-    //     for (usize_t x = 0; x < Wx; x++) {
-    //         Cell *c = &world->grid[y][x];
-    //         fprintf(f, "%zu %zu %d %d %d %d\n",
-    //             x, y, c->age, c->hunger, c->breed_timer,
-    //             world->grass_timer[y][x]);
-    //     }
-    // fclose(f);
-    // return true;
-}
-
+// Carregamento do arquivo binário
 bool load(const char *path) {
-    // FILE *f = fopen(path, "r");
-    // if (!f) return false;
-    //
-    // char line[256];
-    // size_t Wx = 0, H = 0, tick = 0;
-    // uint64_t seed = 1;
-    //
-    // while (fgets(line, sizeof(line), f)) {
-    //     if (strncmp(line, "SIZE", 4) == 0) {
-    //         sscanf(line, "SIZE %zu %zu", &Wx, &H);
-    //     }
-    //     else if (strncmp(line, "TICK", 4) == 0) {
-    //         sscanf(line, "TICK %zu", &tick);
-    //     }
-    //     else if (strncmp(line, "SEED", 4) == 0) {
-    //         unsigned long long s;
-    //         sscanf(line, "SEED %llu", &s);
-    //         seed = (uint64_t)s;
-    //     }
-    //     else if (strncmp(line, "STATS", 5) == 0) {
-    //         sscanf(line, "STATS %zu %zu %zu %zu %zu %zu %zu",
-    //         );
-    //     }
-    //     else if (strncmp(line, "MAP", 3) == 0) {
-    //         break;
-    //     }
-    // }
-    //
-    // if (Wx == 0 || H == 0) { fclose(f); return false; }
-    //
-    // Config cfg = { Wx, H };
-    // create_world(cfg);
-    // world->tick = tick;
-    // world->rng_state = seed;
-    // memcpy(world->stats, stats, sizeof(stats));
-    //
-    // for (usize_t y = 0; y < H; y++) {
-    //     if (!fgets(line, sizeof(line), f)) break;
-    //     for (usize_t x = 0; x < Wx && line[x] && line[x] != '\n'; x++) {
-    //         char t = line[x];
-    //         world->grid[y][x].type = (t == CELL_WOLF || t == CELL_SHEEP ||
-    //                                t == CELL_HUNTER || t == CELL_GRASS)
-    //                               ? t : CELL_EMPTY;
-    //     }
-    // }
-    //
-    // /* skip META header */
-    // while (fgets(line, sizeof(line), f))
-    //     if (strncmp(line, "META", 4) == 0) break;
-    //
-    // usize_t lx, ly;
-    // int age, hunger, breed, gtimer;
-    // while (fscanf(f, "%zu %zu %d %d %d %d\n",
-    //               &lx, &ly, &age, &hunger, &breed, &gtimer) == 6) {
-    //     if (lx < Wx && ly < H) {
-    //         world->grid[ly][lx].age         = age;
-    //         world->grid[ly][lx].hunger      = hunger;
-    //         world->grid[ly][lx].breed_timer = breed;
-    //         world->grass_timer[ly][lx]      = gtimer;
-    //     }
-    // }
-    //
-    // fclose(f);
-    // recalc_stats();
-    // return true;
-}
+    FILE *f = fopen(path, "rb"); 
+    if (!f) return false;
 
-void set_seed(const uint64_t seed) {
-    if (!world) return;
-    world->rng_state = (seed == 0) ? (uint64_t)time(NULL) : seed;
-    if (world->rng_state == 0) world->rng_state = 1;
+    // Segurança: limpa o mapa atual antes de sobrescrever
+    if (current_state.map != NULL) {
+        free(current_state.map);
+    }
+    
+    // Recupera dados básicos
+    fread(&current_state.tick, sizeof(size_t), 1, f);
+    fread(&current_state.map_length_x, sizeof(size_t), 1, f);
+    fread(&current_state.map_length_y, sizeof(size_t), 1, f);
+    fread(&current_stats, sizeof(WorldStats), 1, f);
+    
+    // Realoca a memória para o novo tamanho e joga os dados salvos nela
+    size_t total_cells = current_state.map_length_x * current_state.map_length_y;
+    current_state.map = (char*)malloc(total_cells * sizeof(char));
+    fread(current_state.map, sizeof(char), total_cells, f);
+    
+    fclose(f);
+    return true;
 }
