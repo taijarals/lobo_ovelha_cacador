@@ -1,0 +1,46 @@
+=========================================================
+SIMULADOR DE ECOSSISTEMA: BA-VI (Bamor x TUI x PM)
+=========================================================
+Disciplina: Estrutura de Dados
+Desenvolvido por:
+
+- Daniel Gomes Oitaven
+- Eduardo Santana dos Santos
+- Luis Henrique Santos Sales
+- Alan Lins Santos
+- Lucas de Castro
+- Miguel Oliveira
+
+--- SOBRE O PROJETO ---
+Este programa simula um ecossistema utilizando uma Matriz 
+(para controle espacial rápido e detecção de colisões) e 
+uma Lista Encadeada (para gerenciar os personagens vivos 
+sem alocar memória desnecessária).
+
+As proporções iniciais são:
+- Bamor: 12%
+- TUI: 12%
+- Policia Militar: 5%
+- Obstaculos (Muros e Rios): 10%
+
+--- COMO COMPILAR ---
+O projeto foi modularizado nas pastas 'src' e 'includes'.
+Para compilar corretamente, abra o terminal na pasta raiz 
+do grupo_1 e execute o seguinte comando:
+
+gcc main.c src/*.c -I includes -o simulador
+
+--- COMO EXECUTAR ---
+No Windows (PowerShell ou CMD):
+.\simulador.exe
+
+No Linux / Mac:
+./simulador
+
+--- INSTRUCOES DE USO ---
+1. Ao iniciar, digite a quantidade de linhas e colunas 
+   desejadas para o tabuleiro (minimo recomendado: 5x5).
+2. Digite a quantidade de rodadas para a simulacao.
+3. Pressione ENTER para avançar as rodadas e observar a 
+   movimentacao e as interacoes entre as entidades.
+=========================================================
