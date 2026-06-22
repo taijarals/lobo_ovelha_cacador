@@ -1,0 +1,270 @@
+#include <stdio.h>   // Biblioteca para entrada e saída de dados (printf, scanf)
+#include <stdlib.h>  // Biblioteca para utilitários do sistema (rand, srand)
+#include <time.h>    // Biblioteca para manipulação de tempo e clocks do PC
+
+// [Utilitário]: Pausa o processador por um tempo determinado em milissegundos
+void pausar(int milissegundos) {
+    clock_t limite = clock() + milissegundos * CLOCKS_PER_SEC / 1000;
+    while (clock() < limite);
+}
+
+// [Utilitário]: Limpa o console de forma universal via código de escape ANSI
+void limparTela() {
+    printf("\033[H\033[J"); 
+}
+
+// [Utilitário]: Limpa o buffer do teclado para evitar que o "Enter" pule comandos
+void limparBuffer() {
+    int c;
+    while ((c = getchar()) != '\n' && c != EOF);
+}
+
+// [Estrutura]: Enumeração que define a identidade numérica legível dos personagens
+typedef enum { VAZIO, CACADOR, LOBO, OVELHA, CASA, PEDRA } Tipo;
+
+// [Estrutura]: Registro (Struct) que modela as características de cada indivíduo
+typedef struct {
+    Tipo tipo;     // Guarda qual bicho ou objeto o personagem é
+    int ativa;    // Flag (0 ou 1) que determina se ele está vivo/ativo
+    int fome;     // Contador para mecânicas futuras de alimentação
+    int x, y;     // Coordenadas geográficas atuais dele dentro da tabela
+} Entidade;
+
+// [Globais]: Variáveis mestre de alocação de memória e estado do sistema
+int mapa[20][20];         // Matriz que representa o grid visual do mundo
+Entidade entidades[400];  // Lista mestre contendo os dados lógicos de todos os seres
+int totalEntidades = 0;   // Contador de quantas entidades foram registradas
+int linhas = 10;          // Quantidade de linhas ativas na tabela atual
+int colunas = 10;         // Quantidade de colunas ativas na tabela atual
+int rodadaAtual = 0;      // Contador progressivo da idade do ecossistema
+int limiteRodadas = 0;    // Quantidade máxima de ciclos estipulada pelo usuário
+
+// [Fila de Turnos]: Gerenciador sequencial das ações da rodada
+int filaDeTurnos[400];    // Vetor que guarda a ordem de quem vai se mover
+int tamanhoFila = 0;      // Quantidade de personagens aptos a agir na rodada
+int indiceAtualFila = 0;  // Aponta qual personagem está realizando a ação agora
+
+// [Algoritmo]: Embaralha os índices da fila de turnos de forma aleatória (Fisher-Yates)
+void identificarOrdemTurnos() {
+    for (int i = tamanhoFila - 1; i > 0; i--) {
+        int j = rand() % (i + 1);
+        int temp = filaDeTurnos[i];
+        filaDeTurnos[i] = filaDeTurnos[j];
+        filaDeTurnos[j] = temp;
+    }
+}
+
+// [Controle]: Reconstrói a fila de ações coletando apenas as entidades vivas
+void prepararNovaRodada() {
+    tamanhoFila = 0;
+    indiceAtualFila = 0;
+    
+    for (int i = 0; i < totalEntidades; i++) {
+        // Casas não andam, e personagens precisam estar vivos para entrar na fila
+        if (entidades[i].ativa && entidades[i].tipo != CASA) {
+            filaDeTurnos[tamanhoFila] = i;
+            tamanhoFila++;
+        }
+    }
+    
+    // Se a fila possui integrantes, embaralha a ordem e consome um crédito de tempo
+    if (tamanhoFila > 0) {
+        identificarOrdemTurnos();
+        rodadaAtual++;   // Avança a idade geral do sistema
+        limiteRodadas--; // Diminui o tempo restante do usuário
+    }
+}
+
+// [Lógica]: Sorteia coordenadas e insiste até encontrar uma célula livre (VAZIO)
+void acharCoordenadaVazia(int *x, int *y) {
+    int tentativaX, tentativaY;
+    do {
+        tentativaX = rand() % linhas;
+        tentativaY = rand() % colunas;
+    } while (mapa[tentativaX][tentativaY] != VAZIO); 
+    
+    *x = tentativaX; // Retorna a linha livre por ponteiro
+    *y = tentativaY; // Retorna a coluna livre por ponteiro
+}
+
+// [Lógica]: Instancia a struct no vetor e carimba o bicho na tabela visual
+void adicionarEntidade(Tipo tipo) {
+    int rx, ry;
+    acharCoordenadaVazia(&rx, &ry); // Busca um local livre no mapa
+
+    entidades[totalEntidades].tipo = tipo;
+    entidades[totalEntidades].x = rx;
+    entidades[totalEntidades].y = ry;
+    entidades[totalEntidades].ativa = 1;
+    entidades[totalEntidades].fome = 0;
+    
+    mapa[rx][ry] = tipo; // Fixa o bicho na matriz
+    totalEntidades++;    // Incrementa a contagem de registros
+}
+
+// [Interface]: Painel que coleta tamanhos, populações e limites temporais
+void configurarSimulacao() {
+    int qCacador, qLobo, qOvelha, qCasa, qPedra;
+    
+    limparTela();
+    printf("=============================================\n");
+    printf("   PAINEL DE CONFIGURACAO DO ECOSSISTEMA\n");
+    printf("=============================================\n\n");
+    
+    printf("Defina a quantidade de LINHAS (Min: 5, Max: 20): ");
+    scanf("%d", &linhas); limparBuffer();
+    if(linhas < 5) linhas = 5;
+    if(linhas > 20) linhas = 20;
+
+    printf("Defina a quantidade de COLUNAS (Min: 5, Max: 20): ");
+    scanf("%d", &colunas); limparBuffer();
+    if(colunas < 5) colunas = 5;
+    if(colunas > 20) colunas = 20;
+    
+    // Zera os contadores e limpa as células da matriz para evitar lixo de memória
+    totalEntidades = 0;
+    rodadaAtual = 0;
+    tamanhoFila = 0;
+    indiceAtualFila = 0;
+    for(int i = 0; i < 20; i++) {
+        for(int j = 0; j < 20; j++) {
+            mapa[i][j] = VAZIO;
+        }
+    }
+    
+    int maxEspacos = linhas * colunas; // Mede a área útil disponível
+    printf("\nNota: O mapa possui %d espacos no total.\n\n", maxEspacos);
+    
+    printf("Quantidade de Cacadores (🤠): ");
+    scanf("%d", &qCacador); limparBuffer();
+    
+    printf("Quantidade de Lobos (🐺): ");
+    scanf("%d", &qLobo); limparBuffer();
+    
+    printf("Quantidade de Ovelhas (🐑): ");
+    scanf("%d", &qOvelha); limparBuffer();
+    
+    printf("Quantidade de Casas (🏠): ");
+    scanf("%d", &qCasa); limparBuffer();
+    
+    printf("Quantidade de Pedras (🪨): ");
+    scanf("%d", &qPedra); limparBuffer();
+    
+    printf("\nQuantas rodadas deseja simular? (Ex: 50): ");
+    scanf("%d", &limiteRodadas); limparBuffer();
+    if(limiteRodadas <= 0) limiteRodadas = 9999; // Modo livre caso insira inválido
+    
+    // Impede travamentos reduzindo a carga se extrapolar o espaço físico do mapa
+    if((qCacador + qLobo + qOvelha + qCasa + qPedra) > maxEspacos) {
+        printf("\n[Aviso] Quantidade excessiva! O ecossistema foi reduzido.\n");
+        pausar(2000);
+    }
+    
+    // Loops que realizam o spawn ordenado e seguro de cada bicho
+    for(int i = 0; i < qCacador && totalEntidades < maxEspacos; i++) adicionarEntidade(CACADOR);
+    for(int i = 0; i < qLobo     && totalEntidades < maxEspacos; i++) adicionarEntidade(LOBO);
+    for(int i = 0; i < qOvelha   && totalEntidades < maxEspacos; i++) adicionarEntidade(OVELHA);
+    for(int i = 0; i < qCasa     && totalEntidades < maxEspacos; i++) adicionarEntidade(CASA);
+    for(int i = 0; i < qPedra    && totalEntidades < maxEspacos; i++) adicionarEntidade(PEDRA);
+    
+    printf("\nMapa gerado com sucesso! Iniciando simulacao...");
+    pausar(1500);
+}
+
+// [Motor]: Move exatamente UM único indivíduo sorteado da fila atual
+void moverProximoDaFila() {
+    // Se a fila de passos esvaziou, tenta abrir o próximo ciclo geral de tempo
+    if (indiceAtualFila >= tamanhoFila) {
+        if (limiteRodadas <= 0) return; // Aborta se o saldo de rodadas do usuário zerar
+        prepararNovaRodada();
+        if (tamanhoFila == 0) return;
+    }
+
+    int idx = filaDeTurnos[indiceAtualFila]; // Pega o número do bicho da vez
+    indiceAtualFila++;                       // Passa o ponteiro para a próxima ação
+
+    if (!entidades[idx].ativa) return; // Aborta se ele foi caçado/morto antes do turno dele
+
+    int oldX = entidades[idx].x;
+    int oldY = entidades[idx].y;
+
+    // Sorteia o deslocamento de direções (-1 para recuar, 0 parado, 1 avançar)
+    int dx = (rand() % 3) - 1;
+    int dy = (rand() % 3) - 1;
+
+    int nx = oldX + dx;
+    int ny = oldY + dy;
+
+    // Valida as bordas customizadas e a ocupação da célula destino
+    if (nx >= 0 && nx < linhas && ny >= 0 && ny < colunas) {
+        if (mapa[nx][ny] == VAZIO) {
+            mapa[oldX][oldY] = VAZIO;            // Limpa o rastro antigo no mapa
+            entidades[idx].x = nx;               // Grava nova coordenada X na struct
+            entidades[idx].y = ny;               // Grava nova coordenada Y na struct
+            mapa[nx][ny] = entidades[idx].tipo;  // Carimba a nova posição no mapa
+        }
+    }
+}
+
+// [Fiscal]: Varre a lista conferindo se restou qualquer ser vivo em atividade
+int verificarFimDeJogo() {
+    int animaisVivos = 0;
+    for (int i = 0; i < totalEntidades; i++) {
+        if (entidades[i].ativa && 
+           (entidades[i].tipo == CACADOR || entidades[i].tipo == LOBO || entidades[i].tipo == OVELHA)) {
+            animaisVivos++;
+        }
+    }
+    return (animaisVivos == 0); // Sinaliza verdadeiro (1) caso a fauna seja extinta
+}
+
+// [Interface]: Limpa o vídeo e desenha o grid com tabelas e caracteres Unicode (Emojis)
+void renderizar() {
+    limparTela(); 
+    printf("=== SIMULADOR DE ECOSSISTEMA (Dimensao: %dx%d) ===\n", linhas, colunas);
+    printf("Rodada Geral: %d | Rodadas Restantes: %d\n", rodadaAtual, limiteRodadas);
+    printf("Acoes restantes neste turno de movimentacao: %d\n\n", (tamanhoFila - indiceAtualFila));
+    
+    for(int i = 0; i < linhas; i++) {
+        for(int j = 0; j < colunas; j++) {
+            switch(mapa[i][j]) {
+                case CACADOR: printf("🤠 "); break; 
+                case LOBO:    printf("🐺 "); break; 
+                case OVELHA:  printf("🐑 "); break; 
+                case CASA:    printf("🏠 "); break; 
+                case PEDRA:   printf("🪨 "); break; 
+                default:      printf(" . "); break; // Representa graficamente a célula vazia
+            }
+        }
+        printf("\n");
+    }
+    printf("\n-----------------------------------------\n");
+}
+
+// [Gatilho Principal]: Ponto obrigatório de partida e loop infinito do ciclo vital
+int main() {
+    srand(time(NULL)); // Alimenta o gerador de aleatoriedade usando o relógio interno do PC
+    
+    configurarSimulacao(); // Carrega a tela interativa de dados
+
+    while(1) { 
+        renderizar(); // Exibe as posições atuais na tela
+        
+        // Condição de saída 1: O total de rodadas determinado pelo usuário chegou ao fim
+        if (limiteRodadas <= 0 && indiceAtualFila >= tamanhoFila) {
+            printf("--- SIMULACAO CONCLUIDA: O limite de rodadas escolhido foi alcancado! ---\n");
+            break;
+        }
+
+        // Condição de saída 2: Extinção biológica completa dos animais antes do tempo
+        if (verificarFimDeJogo()) {
+            printf("--- SIMULACAO ENCERRADA: Todos os animais foram extintos antes do tempo! ---\n");
+            break;
+        }
+        
+        moverProximoDaFila(); // Realiza a caminhada de um personagem por ciclo
+        pausar(250);          // Mantém o compasso estável em intervalos de 250 milissegundos
+    }
+
+    return 0; // Finaliza o executável reportando sucesso ao sistema operacional
+}
