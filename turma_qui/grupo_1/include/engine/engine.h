@@ -11,9 +11,9 @@
 #define CELL_HUNTER  'H'
 
 typedef struct {
-    size_t map_length_x;
-    size_t map_length_y;
-} Config;
+    size_t map_width;
+    size_t map_height;
+} GameConfig;
 
 typedef struct {
     size_t tick;
@@ -24,7 +24,7 @@ typedef struct {
     size_t total_wolf_kills;
     size_t total_sheep_kills;
     size_t total_hunter_kills;
-} WorldStats;
+} WorldStatistics;
 
 typedef struct {
     size_t tick;
@@ -32,6 +32,8 @@ typedef struct {
     char *map;
     size_t map_length_x;
     size_t map_length_y;
+
+    bool is_running;
 } WorldState;
 
 typedef struct {
@@ -40,22 +42,23 @@ typedef struct {
 } Pos;
 
 //public API
-void create_world(Config config);
-void reset(void);
+void game_create_world(GameConfig config);
+void game_reset(void);
 
-void pause(void);
-void resume(void);
-void step(void);
-void run(size_t n_steps);
+void game_pause(void);
+void game_resume(void);
+void game_update(void);
+void game_step(void);
+void game_run(size_t n_steps);
 
-WorldState get_state(void);
-WorldStats get_statistics(void);
+WorldState game_get_state(void);
+WorldStatistics game_get_statistics(void);
 
-bool add_cell(size_t pos_x, size_t pos_y, char type);
+bool game_add_cell(size_t pos_x, size_t pos_y, char type);
 
-bool save(const char *path);
-bool load(const char *path);
+bool game_save(const char *path);
+bool game_load(const char *path);
 
-void set_seed(uint64_t seed);
+void game_set_seed(uint64_t seed);
 
 #endif /* SIMULATOR_H */
