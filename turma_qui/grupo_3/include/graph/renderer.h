@@ -3,6 +3,9 @@
 
 #include <engine/engine.h>
 
+#define MIN(a,b) (((a) < (b)) ? (a) : (b))
+#define MAX(a,b) (((a) > (b)) ? (a) : (b))
+
 void render_game_reset(GameConfig config);
 void render_frame(void);
 

@@ -4,6 +4,8 @@
 
 #include <stdio.h>
 
+int delta = 0;
+
 int main(int argc, char const *argv[])
 {
     printf("Hello, World!\n");
@@ -23,7 +25,7 @@ int main(int argc, char const *argv[])
     render_game_reset(config);
 
     while (!window_closed()) {
-        game_update();
+        if (delta++ % 10 == 0) game_update();
         render_frame();
     }
 
