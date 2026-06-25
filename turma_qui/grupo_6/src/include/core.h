@@ -1,0 +1,55 @@
+#ifndef CORE_H_
+#define CORE_H_
+
+typedef enum { UP, DOWN, LEFT, RIGHT } DIRECTION;
+typedef enum { HUNTER, VAMPIRE, WEREWOLF, TREE } EntityType;
+
+#define WINDOW_WIDTH 1200
+#define WINDOW_HEIGHT 800
+
+#define MATRIX_NUMBER_COLUMNS 8
+#define MATRIX_NUMBER_ROWS 8
+#define MATRIX_WIDTH_DIS 360 
+#define MATRIX_HEIGHT_DIS 160 
+#define CELL_SIZE 60
+
+#define BACKGROUND_LINE_ASSEST "assets/background/lines.png"
+
+#define HUNTER_ASSETS "assets/hunter/Walk-Sheet.png"
+#define HUNTER_DEST_RECT_X 20.0f
+#define HUNTER_DEST_RECT_Y 100.0f
+#define HUNTER_DEST_RECT_WIDTH 50.0f
+#define HUNTER_DEST_RECT_HEIGHT 50.0f
+
+#define HUNTER_IDLE_FRAME 24
+#define HUNTER_IDLE_FRAME_WIDTH 24
+#define HUNTER_IDLE_FRAME_HEIGHT 24
+
+#define HUNTER_ORIGIN_X 0.0f
+#define HUNTER_ORIGIN_Y 0.0f
+
+#define VAMPIRE_ASSETS "assets/Vampire/Bat-Transforming-Vampire.png"
+
+#define VAMPIRE_DEST_RECT_X 10.0f
+#define VAMPIRE_DEST_RECT_Y 200.0f
+#define VAMPIRE_DEST_RECT_WIDTH 30.0f
+#define VAMPIRE_DEST_RECT_HEIGHT 30.0f
+
+#define VAMPIRE_IDLE_FRAME 0
+#define VAMPIRE_IDLE_FRAME_WIDTH 16
+#define VAMPIRE_IDLE_FRAME_HEIGHT 16
+
+#define WEREWOLF_ASSETS "assets/werewolf/werewolf_edle.png"
+
+#define WEREWOLF_DEST_RECT_X 92.0f
+#define WEREWOLF_DEST_RECT_Y 0.0f
+// 49
+#define WEREWOLF_DEST_RECT_WIDTH 46.0f
+#define WEREWOLF_DEST_RECT_HEIGHT 60.0f
+
+#define WEREWOLF_IDLE_FRAME_X 0
+#define WEREWOLF_IDLE_FRAME_Y 0
+#define WEREWOLF_IDLE_FRAME_WIDTH 92
+#define WEREWOLF_IDLE_FRAME_HEIGHT 100
+
+#endif // !CORE_H_

@@ -1,0 +1,7 @@
+Yago Guanaes Rocha - 2230105850
+
+Melhorias a serem feitas: Estou repetindo código nas chamadas das funções de dar posição inicial (give_init_position), atualizar o valor do tempo de mover de cada entidade, na hora de mover a entidade (move_entity) e na hora de desenhar a entidade (draw_entitie)
+ 
+
+Link do jogo rodando:
+https://drive.google.com/file/d/1CMK8R6SRzF6_drEKrf_13JCkVTYlPwZd/view?usp=sharing
