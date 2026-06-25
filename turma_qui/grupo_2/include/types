@@ -1,0 +1,49 @@
+#ifndef TYPES_H
+#define TYPES_H
+
+typedef enum {
+    ENTITY_HUMAN = 0,
+    ENTITY_ZOMBIE = 1,
+    ENTITY_SOLDIER = 2
+} EntityType;
+
+typedef enum {
+    OBSTACLE_NONE = 0,
+    OBSTACLE_TREE = 1,
+    OBSTACLE_ROCK = 2
+} ObstacleType;
+
+typedef struct {
+    int row;
+    int col;
+} Position;
+
+typedef struct {
+    int id;
+    EntityType type;
+    Position pos;
+    int alive;
+    int age;
+    int energy;
+} Entity;
+
+typedef struct {
+    Entity *items;
+    int count;
+    int capacity;
+    int next_id;
+} EntityList;
+
+typedef struct {
+    int size;
+    ObstacleType *obstacles;
+} Board;
+
+typedef struct {
+    int humans;
+    int zombies;
+    int soldiers;
+    int obstacles;
+} Stats;
+
+#endif
