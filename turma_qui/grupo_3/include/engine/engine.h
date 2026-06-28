@@ -29,7 +29,9 @@ typedef struct {
 typedef struct {
     size_t tick;
 
-    char *map;
+    char *map_entity;
+    char *map_background;
+
     size_t map_length_x;
     size_t map_length_y;
 

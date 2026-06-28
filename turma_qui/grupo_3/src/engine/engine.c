@@ -15,7 +15,7 @@ typedef enum {
 } Directions;
 
 // Variáveis de estado global (Estáticas para proteger o encapsulamento da sua engine)
-static WorldState current_state = {0, NULL, 0, 0, 0};
+static WorldState current_state = {0, NULL, NULL, 0, 0, 0};
 static WorldStatistics current_stats = {0, 0, 0, 0, 0, 0, 0};
 
 // --- FUNÇÕES AUXILIARES ---
@@ -55,8 +55,8 @@ bool game_add_cell(size_t pos_x, size_t pos_y, char type) {
     }
     
     size_t idx = get_index(pos_x, pos_y);
-    if (current_state.map[idx] == CELL_EMPTY) {
-        current_state.map[idx] = type;
+    if (current_state.map_entity[idx] == CELL_EMPTY) {
+        current_state.map_entity[idx] = type;
         
         // Atualiza as estatísticas
         if (type == CELL_WOLF) current_stats.wolf_count++;
@@ -70,8 +70,8 @@ bool game_add_cell(size_t pos_x, size_t pos_y, char type) {
 
 void game_create_world(GameConfig config) {
     // 1. Controle de memória: libera o mapa antigo se existir
-    if (current_state.map != NULL) {
-        free(current_state.map);
+    if (current_state.map_entity != NULL) {
+        free(current_state.map_entity);
     }
 
     // 2. Validação da regra do HTML (Tamanho mínimo 5x5)
@@ -82,8 +82,8 @@ void game_create_world(GameConfig config) {
     size_t total_cells = current_state.map_length_x * current_state.map_length_y;
     
     // Alocação dinâmica do mapa como vetor 1D
-    current_state.map = (char*)malloc(total_cells * sizeof(char));
-    memset(current_state.map, CELL_EMPTY, total_cells); 
+    current_state.map_entity = (char*)malloc(total_cells * sizeof(char));
+    memset(current_state.map_entity, CELL_EMPTY, total_cells); 
     memset(&current_stats, 0, sizeof(WorldStatistics));
 
     // 3. Cálculos de proporção baseados nas regras de negócio
@@ -131,7 +131,7 @@ void game_step(void) {
     for (size_t y = 0; y < current_state.map_length_y; y++) {
         for (size_t x = 0; x < current_state.map_length_x; x++) {
             size_t current_idx = get_index(x, y);
-            char entity = current_state.map[current_idx];
+            char entity = current_state.map_entity[current_idx];
 
             if ((entity == CELL_WOLF || entity == CELL_SHEEP || entity == CELL_HUNTER) && !has_moved[current_idx]) {
 
@@ -152,14 +152,14 @@ void game_step(void) {
                 }
 
                 size_t new_idx = get_index(new_x, new_y);
-                char target = current_state.map[new_idx];
+                char target = current_state.map_entity[new_idx];
 
                 if (target == CELL_EMPTY) {
                     has_moved[current_idx] = true;
                     has_moved[new_idx] = true;
 
-                    current_state.map[new_idx] = entity;
-                    current_state.map[current_idx] = CELL_EMPTY;
+                    current_state.map_entity[new_idx] = entity;
+                    current_state.map_entity[current_idx] = CELL_EMPTY;
                 }
 
                 // Lobo sobrepõe Ovelha
@@ -170,8 +170,8 @@ void game_step(void) {
                     has_moved[new_idx] = true;
                     has_moved[current_idx] = true;
 
-                    current_state.map[new_idx] = CELL_WOLF;
-                    //current_state.map[current_idx] = CELL_EMPTY;
+                    current_state.map_entity[new_idx] = CELL_WOLF;
+                    //current_state.map_entity[current_idx] = CELL_EMPTY;
 
                     current_stats.total_sheep_kills++;
                     current_stats.sheep_count--;
@@ -186,8 +186,8 @@ void game_step(void) {
                     has_moved[new_idx] = true;
                     has_moved[current_idx] = true;
 
-                    current_state.map[new_idx] = CELL_HUNTER;
-                    //current_state.map[current_idx] = CELL_EMPTY;
+                    current_state.map_entity[new_idx] = CELL_HUNTER;
+                    //current_state.map_entity[current_idx] = CELL_EMPTY;
 
                     current_stats.total_wolf_kills++;
                     current_stats.wolf_count--;
@@ -202,8 +202,8 @@ void game_step(void) {
                     has_moved[new_idx] = true;
                     has_moved[current_idx] = true;
 
-                    current_state.map[new_idx] = CELL_SHEEP;
-                    //current_state.map[current_idx] = CELL_EMPTY;
+                    current_state.map_entity[new_idx] = CELL_SHEEP;
+                    //current_state.map_entity[current_idx] = CELL_EMPTY;
 
                     current_stats.total_hunter_kills++;
                     current_stats.hunter_count--;
@@ -242,7 +242,7 @@ bool game_save(const char *path) {
     
     // Salva todo o bloco de memória do mapa
     size_t total_cells = current_state.map_length_x * current_state.map_length_y;
-    fwrite(current_state.map, sizeof(char), total_cells, f);
+    fwrite(current_state.map_entity, sizeof(char), total_cells, f);
     
     fclose(f);
     return true;
@@ -254,8 +254,8 @@ bool game_load(const char *path) {
     if (!f) return false;
 
     // Segurança: limpa o mapa atual antes de sobrescrever
-    if (current_state.map != NULL) {
-        free(current_state.map);
+    if (current_state.map_entity != NULL) {
+        free(current_state.map_entity);
     }
     
     // Recupera dados básicos
@@ -266,8 +266,8 @@ bool game_load(const char *path) {
     
     // Realoca a memória para o novo tamanho e joga os dados salvos nela
     size_t total_cells = current_state.map_length_x * current_state.map_length_y;
-    current_state.map = (char*)malloc(total_cells * sizeof(char));
-    fread(current_state.map, sizeof(char), total_cells, f);
+    current_state.map_entity = (char*)malloc(total_cells * sizeof(char));
+    fread(current_state.map_entity, sizeof(char), total_cells, f);
     
     fclose(f);
     return true;

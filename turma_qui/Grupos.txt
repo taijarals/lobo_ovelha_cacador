@@ -1,7 +1,7 @@
 # Grupos da turma de Quinta-Feira de estruturas de dados
 
-## Grupo 1:
-[Informações](/turma_qui/grupo_1/README.md)
+## Grupo 3:
+[Informações](/turma_qui/grupo_3/README.md)
 
 - Caique Augusto
 - Leonardo Pimentel

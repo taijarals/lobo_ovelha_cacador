@@ -163,7 +163,7 @@ static void render_board(
     BeginTextureMode(texture);
     ClearBackground(BLANK);
 
-    char *map = world_state->map;
+    char *map = world_state->map_entity;
 
     for (size_t y = 0; y < map_height; y++) {
         for (size_t x = 0; x < map_width; x++) {
@@ -386,6 +386,22 @@ static void render_map_gen_options(
         50
     };
     textbox(textBoxRect, sheep_text_box);
+
+    y_offset += 70;
+
+    label(
+        "W%:",
+        (int) map_gen_options.x + 10,
+        (int) (map_gen_options.y + y_offset) + 14
+    );
+
+    textBoxRect = (Rectangle){
+        map_gen_options.x + 60,
+        map_gen_options.y + y_offset,
+        rect_width - 70,
+        50
+    };
+    textbox(textBoxRect, wolf_text_box);
 }
 
 static void render_ui(
