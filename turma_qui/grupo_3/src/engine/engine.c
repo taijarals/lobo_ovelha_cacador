@@ -1,17 +1,15 @@
-#include "engine.h"
+#include <engine/engine.h>
+#include <engine/noise.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <time.h>
 
-// O arquivo noise.c possui essa função. Declaramos aqui para o linkador encontrar.
-float perlin2d(int seed, float x, float y, float freq, int depth);
-
 #define CELL_TREE 'T'
 #define CELL_ROCK 'R'
 
 #define REPRODUCTION_RATE 3
-#define TERRAIN_WATER 4 // Indice da água definido pelo Leo
+#define TERRAIN_WATER 4
 
 static WorldState current_state = {0, NULL, NULL, 0, 0, false, 0};
 static WorldStatistics current_stats = {0, 0, 0, 0, 0, 0, 0};
@@ -162,11 +160,9 @@ void game_reset(void) {
 
 void game_pause(void) { current_state.is_running = false; }
 void game_resume(void) { current_state.is_running = true; }
-void game_update(void) { game_step(); }
+void game_update(void) { if (current_state.is_running) game_step(); }
 
 void game_step(void) {
-    if (!current_state.is_running && current_state.tick > 0) return;
-
     current_state.tick++;
     size_t total_cells = current_state.map_length_x * current_state.map_length_y;
 
@@ -233,10 +229,7 @@ void game_step(void) {
 }
 
 void game_run(size_t n_steps) {
-    game_resume();
-    for (size_t i = 0; i < n_steps; i++) {
-        game_step();
-    }
+    for (size_t i = 0; i < n_steps; i++) game_step();
 }
 
 WorldState game_get_state(void) { return current_state; }
