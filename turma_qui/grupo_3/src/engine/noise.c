@@ -29,10 +29,10 @@ float noise2d(int seed, float x, float y)
     float x_frac = x - x_int;
     float y_frac = y - y_int;
 
-    int s = whiteNoise2d(seed, x_int, y_int);
-    int t = whiteNoise2d(seed, x_int+1, y_int);
-    int u = whiteNoise2d(seed, x_int, y_int+1);
-    int v = whiteNoise2d(seed, x_int+1, y_int+1);
+    float s = whiteNoise2d(seed, x_int, y_int);
+    float t = whiteNoise2d(seed, x_int+1, y_int);
+    float u = whiteNoise2d(seed, x_int, y_int+1);
+    float v = whiteNoise2d(seed, x_int+1, y_int+1);
 
     float low = smooth_inter(s, t, x_frac);
     float high = smooth_inter(u, v, x_frac);
@@ -51,7 +51,7 @@ float perlin2d(int seed, float x, float y, float freq, int depth)
     int i;
     for(i=0; i<depth; i++)
     {
-        div += 256 * amp;
+        div += amp;
         fin += noise2d(seed, xa, ya) * amp;
         amp /= 2;
         xa *= 2;

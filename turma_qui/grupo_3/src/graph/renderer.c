@@ -21,7 +21,7 @@
 #define THEME_FONT_SPACING 1.0f
 
 RenderTexture2D mapTexture = {0};
-Texture2D backgroundTexture = {0};
+Texture2D tilemapTexture = {0};
 Texture2D sheepTexture = {0};
 Texture2D wolfTexture = {0};
 Texture2D hunterTexture = {0};
@@ -163,11 +163,52 @@ static void render_board(
     BeginTextureMode(texture);
     ClearBackground(BLANK);
 
-    char *map = world_state->map_entity;
+    char *entities_map = world_state->map_entity;
+    char *tiles_map = world_state->map_background;
+
+
 
     for (size_t y = 0; y < map_height; y++) {
         for (size_t x = 0; x < map_width; x++) {
-            const char c = map[y * map_width + x];
+            const char c = tiles_map[y * map_width + x];
+
+            Rectangle src = { 0, 0, 16, 16 };
+            bool err = false;
+
+            switch (c) {
+                case 0: src.x = 16; src.y = 0; break;
+                case 1: src.x = 32; src.y = 0; break;
+                case 2: src.x = 32; src.y = 0; break;
+                case 3: src.x = 32; src.y = 16; break;
+                case 4: src.x = 48; src.y = 0; break;
+
+                default: err = true; break;
+            }
+
+            if (err) {
+                DrawRectangle((int)x * SPRITE_SIZE - SPRITE_OFFSET, (int)y * SPRITE_SIZE - SPRITE_OFFSET,
+                SPRITE_SIZE, SPRITE_SIZE, RED);
+            } else {
+                DrawTexturePro(
+                    tilemapTexture,
+                    src,
+                    (Rectangle){
+                        (float)x * SPRITE_SIZE,
+                        (float)y * SPRITE_SIZE,
+                        SPRITE_SIZE,
+                        SPRITE_SIZE
+                    },
+                    (Vector2){0, 0},
+                    0,
+                    WHITE
+                );
+            }
+        }
+    }
+
+    for (size_t y = 0; y < map_height; y++) {
+        for (size_t x = 0; x < map_width; x++) {
+            const char c = entities_map[y * map_width + x];
 
             switch (c) {
                 case ' ': break;
@@ -459,7 +500,7 @@ void render_game_reset(const GameConfig game_config) {
         UnloadRenderTexture(mapTexture);
         mapTexture = (RenderTexture2D){0};
     }
-    if (backgroundTexture.id == 0) backgroundTexture = LoadTexture("assets/background.png");
+    if (tilemapTexture.id == 0) tilemapTexture = LoadTexture("assets/tilemap.png");
     if (sheepTexture.id == 0) sheepTexture = LoadTexture("assets/sheep.png");
     if (wolfTexture.id == 0) wolfTexture = LoadTexture("assets/wolf.png");
     if (hunterTexture.id == 0) hunterTexture = LoadTexture("assets/hunter.png");
