@@ -1,10 +1,12 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 4.2)
+include(FetchContent)
 
 project(game C)
 
 set(CMAKE_C_STANDARD 11)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
+
 
 file(GLOB_RECURSE SRC CONFIGURE_DEPENDS src/*.c)
 add_executable(game ${SRC})
@@ -16,17 +18,20 @@ if(MO_GUI)
 endif()
 
 
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(RAYLIB REQUIRED raylib)
+FetchContent_Declare(
+        raylib
+        GIT_REPOSITORY https://github.com/raysan5/raylib.git
+        GIT_TAG 5.5
+)
+FetchContent_MakeAvailable(raylib)
 
 
 target_include_directories(game PRIVATE
         include
-        ${RAYLIB_INCLUDE_DIRS}
 )
 
 target_link_libraries(game PRIVATE
-        ${RAYLIB_LIBRARIES}
+        raylib
         m
 )
 
@@ -36,15 +41,17 @@ target_compile_options(game PRIVATE
 )
 
 # Copia os assets do jogo pra o diretório de build
-file(GLOB_RECURSE PNG_FILES
+file(GLOB_RECURSE ASSET_FILES
         "${CMAKE_SOURCE_DIR}/assets/*.png"
+        "${CMAKE_SOURCE_DIR}/assets/*.ttf"
+        "${CMAKE_SOURCE_DIR}/assets/*LICENSE"
 )
 
-foreach(PNG_FILE ${PNG_FILES})
+foreach(ASSET_FILE ${ASSET_FILES})
 
     file(RELATIVE_PATH REL_PATH
             "${CMAKE_SOURCE_DIR}/assets"
-            "${PNG_FILE}"
+            "${ASSET_FILE}"
     )
 
     get_filename_component(
@@ -60,7 +67,7 @@ foreach(PNG_FILE ${PNG_FILES})
             "${CMAKE_SOURCE_DIR}/bin/assets/${REL_DIR}"
 
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${PNG_FILE}"
+            "${ASSET_FILE}"
             "${CMAKE_SOURCE_DIR}/bin/assets/${REL_PATH}"
 
             VERBATIM

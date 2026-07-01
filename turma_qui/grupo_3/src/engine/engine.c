@@ -1,98 +1,148 @@
-#include "engine/engine.h"
+#include <engine/engine.h>
+#include <engine/noise.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <time.h>
 
-// Definindo os obstáculos exigidos pelo escopo
 #define CELL_TREE 'T'
 #define CELL_ROCK 'R'
 
-typedef enum {
-    DIRECTION_UP = 0,
-    DIRECTION_RIGHT = 1,
-    DIRECTION_DOWN = 2,
-    DIRECTION_LEFT = 3
-} Directions;
+#define REPRODUCTION_RATE 3
+#define TERRAIN_WATER 4
 
-// Variáveis de estado global (Estáticas para proteger o encapsulamento da sua engine)
-static WorldState current_state = {0, NULL, 0, 0, 0};
+static WorldState current_state = {0, NULL, NULL, 0, 0, false, 0};
 static WorldStatistics current_stats = {0, 0, 0, 0, 0, 0, 0};
 
 // --- FUNÇÕES AUXILIARES ---
 
-// Converte coordenadas 2D (x, y) para índice de array 1D
 static size_t get_index(size_t x, size_t y) {
     return y * current_state.map_length_x + x;
 }
 
-// Tenta adicionar células em posições vazias aleatórias
+static bool add_cell_internal(size_t pos_x, size_t pos_y, char type) {
+    if (pos_x >= current_state.map_length_x || pos_y >= current_state.map_length_y) {
+        return false;
+    }
+    size_t idx = get_index(pos_x, pos_y);
+    
+    // Regra da Água: Ninguém pode nascer em cima da água
+    if (current_state.map_background != NULL && current_state.map_background[idx] == TERRAIN_WATER) {
+        return false;
+    }
+
+    if (current_state.map_entity[idx] == CELL_EMPTY) {
+        current_state.map_entity[idx] = type;
+        if (type == CELL_WOLF) current_stats.wolf_count++;
+        else if (type == CELL_SHEEP) current_stats.sheep_count++;
+        else if (type == CELL_HUNTER) current_stats.hunter_count++;
+        return true;
+    }
+    return false;
+}
+
 static void spawn_randomly(size_t count, char type) {
     size_t placed = 0;
-    // Prevenção de loop infinito caso o mapa esteja muito cheio
-    size_t max_attempts = count * 10; 
+    size_t max_attempts = count * 20; // Aumentado para lidar com mapas com muita água
     size_t attempts = 0;
 
     while (placed < count && attempts < max_attempts) {
         size_t x = rand() % current_state.map_length_x;
         size_t y = rand() % current_state.map_length_y;
-        
-        if (game_add_cell(x, y, type)) {
-            placed++;
-        }
+        if (add_cell_internal(x, y, type)) placed++;
         attempts++;
     }
 }
 
-// --- IMPLEMENTAÇÃO DA API PÚBLICA ---
+// Reprodução confinada em área 3x3 ao redor das entidades
+static void spawn_local(size_t center_x, size_t center_y, size_t count, char type) {
+    size_t placed = 0;
+    
+    // Varredura do grid 3x3
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            if (dx == 0 && dy == 0) continue; // Pula o centro onde os pais estão
+            
+            long nx = (long)center_x + dx;
+            long ny = (long)center_y + dy;
+            
+            // Verifica limites do mapa
+            if (nx >= 0 && nx < (long)current_state.map_length_x && 
+                ny >= 0 && ny < (long)current_state.map_length_y) {
+                
+                size_t idx = get_index((size_t)nx, (size_t)ny);
+                
+                // Checa se está vazio e não é água
+                if (current_state.map_entity[idx] == CELL_EMPTY && 
+                    current_state.map_background[idx] != TERRAIN_WATER) {
+                    
+                    current_state.map_entity[idx] = type;
+                    if (type == CELL_WOLF) current_stats.wolf_count++;
+                    else if (type == CELL_SHEEP) current_stats.sheep_count++;
+                    else if (type == CELL_HUNTER) current_stats.hunter_count++;
+                    
+                    placed++;
+                    if (placed >= count) return; // Limite x atingido
+                }
+            }
+        }
+    }
+}
+
+// --- IMPLEMENTAÇÃO DA API PÚBLICA (engine.h) ---
 
 void game_set_seed(uint64_t seed) {
-    srand((unsigned int)seed);
+    current_state.seed = seed;
 }
 
 bool game_add_cell(size_t pos_x, size_t pos_y, char type) {
-    if (pos_x >= current_state.map_length_x || pos_y >= current_state.map_length_y) {
-        return false; // Fora dos limites
-    }
-    
-    size_t idx = get_index(pos_x, pos_y);
-    if (current_state.map[idx] == CELL_EMPTY) {
-        current_state.map[idx] = type;
-        
-        // Atualiza as estatísticas
-        if (type == CELL_WOLF) current_stats.wolf_count++;
-        else if (type == CELL_SHEEP) current_stats.sheep_count++;
-        else if (type == CELL_HUNTER) current_stats.hunter_count++;
-        
-        return true;
-    }
-    return false; // Célula já ocupada
+    return add_cell_internal(pos_x, pos_y, type);
 }
 
 void game_create_world(GameConfig config) {
-    // 1. Controle de memória: libera o mapa antigo se existir
-    if (current_state.map != NULL) {
-        free(current_state.map);
-    }
+    if (current_state.map_entity != NULL) free(current_state.map_entity);
+    if (current_state.map_background != NULL) free(current_state.map_background);
 
-    // 2. Validação da regra do HTML (Tamanho mínimo 5x5)
     current_state.map_length_x = config.map_width < 5 ? 5 : config.map_width;
     current_state.map_length_y = config.map_height < 5 ? 5 : config.map_height;
     current_state.tick = 0;
-    
+    current_state.is_running = false;
+
+    // Gera seed automaticamente se nenhuma foi definida via game_set_seed()
+    if (current_state.seed == 0) {
+        current_state.seed = (uint64_t)time(NULL);
+    }
+
+    // Toda a aleatoriedade da engine parte daqui, usando a seed do WorldState
+    srand((unsigned int)current_state.seed);
+
     size_t total_cells = current_state.map_length_x * current_state.map_length_y;
-    
-    // Alocação dinâmica do mapa como vetor 1D
-    current_state.map = (char*)malloc(total_cells * sizeof(char));
-    memset(current_state.map, CELL_EMPTY, total_cells); 
+
+    current_state.map_entity = (char*)malloc(total_cells * sizeof(char));
+    current_state.map_background = (char*)malloc(total_cells * sizeof(char));
+    memset(current_state.map_entity, CELL_EMPTY, total_cells);
     memset(&current_stats, 0, sizeof(WorldStatistics));
 
-    // 3. Cálculos de proporção baseados nas regras de negócio
-    size_t qtd_fac1 = (size_t)(total_cells * 0.12); // Ovelhas (12%)
-    size_t qtd_fac2 = (size_t)(total_cells * 0.12); // Lobos (12%)
-    size_t qtd_fac3 = (size_t)(total_cells * 0.05); // Caçadores (5%)
-    size_t qtd_obs  = (size_t)(total_cells * 0.10); // Obstáculos (10%)
+    // Geração procedural do Background usando perlin2d (0 - 4)
+    for (size_t y = 0; y < current_state.map_length_y; y++) {
+        for (size_t x = 0; x < current_state.map_length_x; x++) {
+            float p = perlin2d((int)current_state.seed, (float)x, (float)y, 0.1f, 4);
+            
+            // Mapeia a saída do perlin para índices de 0 a 4
+            int terrain = (int)(p * 5.0f);
+            if (terrain < 0) terrain = 0;
+            if (terrain > 4) terrain = 4;
+            
+            current_state.map_background[get_index(x, y)] = (char)terrain;
+        }
+    }
 
-    // 4. Popula o mundo
+    // Proporções exigidas pelo professor
+    size_t qtd_fac1 = (size_t)(total_cells * 0.12); // Ovelhas
+    size_t qtd_fac2 = (size_t)(total_cells * 0.12); // Lobos
+    size_t qtd_fac3 = (size_t)(total_cells * 0.05); // Caçadores
+    size_t qtd_obs  = (size_t)(total_cells * 0.10); // Obstáculos
+
     spawn_randomly(qtd_obs / 2, CELL_TREE);
     spawn_randomly(qtd_obs / 2, CELL_ROCK);
     spawn_randomly(qtd_fac1, CELL_SHEEP);
@@ -101,124 +151,80 @@ void game_create_world(GameConfig config) {
 }
 
 void game_reset(void) {
+    // Preserva a seed atual para recriar exatamente o mesmo mundo
+    uint64_t saved_seed = current_state.seed;
     GameConfig config = {current_state.map_length_x, current_state.map_length_y};
+    current_state.seed = saved_seed; // garante que game_create_world não gere uma nova
     game_create_world(config);
 }
 
 void game_pause(void) { current_state.is_running = false; }
 void game_resume(void) { current_state.is_running = true; }
-
-void game_update(void) {
-    const int extinct = (current_stats.hunter_count == 0 ? 1 : 0)
-        + (current_stats.wolf_count == 0 ? 1 : 0)
-        + (current_stats.sheep_count == 0 ? 1 : 0);
-    if (extinct >= 2) return;
-
-    if (!current_state.is_running && current_state.tick > 0) return;
-    game_step();
-}
+void game_update(void) { if (current_state.is_running) game_step(); }
 
 void game_step(void) {
     current_state.tick++;
-
     size_t total_cells = current_state.map_length_x * current_state.map_length_y;
 
-    // Buffer dinâmico para registrar quem já andou neste turno
     bool *has_moved = (bool*)calloc(total_cells, sizeof(bool));
     if (!has_moved) return;
 
-    // Loop de varredura bidimensional
     for (size_t y = 0; y < current_state.map_length_y; y++) {
         for (size_t x = 0; x < current_state.map_length_x; x++) {
             size_t current_idx = get_index(x, y);
-            char entity = current_state.map[current_idx];
+            char entity = current_state.map_entity[current_idx];
 
             if ((entity == CELL_WOLF || entity == CELL_SHEEP || entity == CELL_HUNTER) && !has_moved[current_idx]) {
-
-                const int dirs[4] = {DIRECTION_UP, DIRECTION_RIGHT, DIRECTION_DOWN, DIRECTION_LEFT};
-                const int dir = dirs[rand() % 4];
-
+                int dir = rand() % 4;
                 size_t new_x = x;
                 size_t new_y = y;
 
-                const size_t w = current_state.map_length_x;
-                const size_t h = current_state.map_length_y;
-
-                switch (dir) {
-                    case DIRECTION_UP:    if (y > 0) new_y--; break;
-                    case DIRECTION_DOWN:  if (y < h-1) new_y++; break;
-                    case DIRECTION_LEFT:  if (x > 0) new_x--; break;
-                    case DIRECTION_RIGHT: if (x < w-1) new_x++; break;
-                }
+                if (dir == 0 && y > 0) new_y--;
+                else if (dir == 1 && y < current_state.map_length_y - 1) new_y++;
+                else if (dir == 2 && x > 0) new_x--;
+                else if (dir == 3 && x < current_state.map_length_x - 1) new_x++;
 
                 size_t new_idx = get_index(new_x, new_y);
-                char target = current_state.map[new_idx];
+                char target = current_state.map_entity[new_idx];
+                char bg_target = current_state.map_background[new_idx];
 
-                if (target == CELL_EMPTY) {
+                // Regra da Água (Não pode se mover para lá)
+                if (bg_target == TERRAIN_WATER) {
                     has_moved[current_idx] = true;
-                    has_moved[new_idx] = true;
-
-                    current_state.map[new_idx] = entity;
-                    current_state.map[current_idx] = CELL_EMPTY;
                 }
-
-                // Lobo sobrepõe Ovelha
-                else if (
-                    (entity == CELL_WOLF && target == CELL_SHEEP) ||
-                    (entity == CELL_SHEEP && target == CELL_WOLF)
-                ) {
+                else if (target == CELL_EMPTY) {
+                    current_state.map_entity[new_idx] = entity;
+                    current_state.map_entity[current_idx] = CELL_EMPTY;
                     has_moved[new_idx] = true;
-                    has_moved[current_idx] = true;
-
-                    current_state.map[new_idx] = CELL_WOLF;
-                    //current_state.map[current_idx] = CELL_EMPTY;
-
+                }
+                else if (entity == CELL_WOLF && target == CELL_SHEEP) {
+                    // Predação Lobo -> Ovelha
+                    current_state.map_entity[new_idx] = CELL_WOLF;
+                    current_state.map_entity[current_idx] = CELL_EMPTY;
+                    has_moved[new_idx] = true;
                     current_stats.total_sheep_kills++;
                     current_stats.sheep_count--;
-                    current_stats.wolf_count++;
                 }
-
-                // Caçador sobrepõe Lobo
-                else if (
-                    (entity == CELL_HUNTER && target == CELL_WOLF) ||
-                    (entity == CELL_WOLF && target == CELL_HUNTER)
-                ) {
+                else if (entity == CELL_HUNTER && target == CELL_WOLF) {
+                    // Predação Caçador -> Lobo
+                    current_state.map_entity[new_idx] = CELL_HUNTER;
+                    current_state.map_entity[current_idx] = CELL_EMPTY;
                     has_moved[new_idx] = true;
-                    has_moved[current_idx] = true;
-
-                    current_state.map[new_idx] = CELL_HUNTER;
-                    //current_state.map[current_idx] = CELL_EMPTY;
-
                     current_stats.total_wolf_kills++;
                     current_stats.wolf_count--;
-                    current_stats.hunter_count++;
                 }
-
-                // Ovelha sobrepõe caçador
-                else if (
-                    (entity == CELL_SHEEP && target == CELL_HUNTER) ||
-                    (entity == CELL_HUNTER && target == CELL_SHEEP)
-                ) {
-                    has_moved[new_idx] = true;
+                else if (entity == target) {
+                    // Reprodução local x = 3 em área 3x3
                     has_moved[current_idx] = true;
-
-                    current_state.map[new_idx] = CELL_SHEEP;
-                    //current_state.map[current_idx] = CELL_EMPTY;
-
-                    current_stats.total_hunter_kills++;
-                    current_stats.hunter_count--;
-                    current_stats.sheep_count++;
+                    spawn_local(x, y, REPRODUCTION_RATE, entity); 
                 }
-
-                // Condição de Bloqueio: Bateu numa árvore, pedra ou aliado.
                 else {
+                    // Bloqueios (Ovelha em Lobo, Entidade em Árvore/Rocha)
                     has_moved[current_idx] = true;
                 }
             }
         }
     }
-
-    // Limpeza de memória obrigatória.
     free(has_moved);
 }
 
@@ -229,45 +235,43 @@ void game_run(size_t n_steps) {
 WorldState game_get_state(void) { return current_state; }
 WorldStatistics game_get_statistics(void) { return current_stats; }
 
-// Implementação de manipulação de arquivos (Binários)
 bool game_save(const char *path) {
-    FILE *f = fopen(path, "wb"); 
+    FILE *f = fopen(path, "wb");
     if (!f) return false;
-    
-    // Salva configurações atuais e estatísticas
+
     fwrite(&current_state.tick, sizeof(size_t), 1, f);
     fwrite(&current_state.map_length_x, sizeof(size_t), 1, f);
     fwrite(&current_state.map_length_y, sizeof(size_t), 1, f);
+    fwrite(&current_state.seed, sizeof(uint64_t), 1, f);   // seed do mundo
     fwrite(&current_stats, sizeof(WorldStatistics), 1, f);
-    
-    // Salva todo o bloco de memória do mapa
+
     size_t total_cells = current_state.map_length_x * current_state.map_length_y;
-    fwrite(current_state.map, sizeof(char), total_cells, f);
-    
+    fwrite(current_state.map_entity, sizeof(char), total_cells, f);
+    fwrite(current_state.map_background, sizeof(char), total_cells, f);
+
     fclose(f);
     return true;
 }
 
-// Carregamento do arquivo binário
 bool game_load(const char *path) {
-    FILE *f = fopen(path, "rb"); 
+    FILE *f = fopen(path, "rb");
     if (!f) return false;
 
-    // Segurança: limpa o mapa atual antes de sobrescrever
-    if (current_state.map != NULL) {
-        free(current_state.map);
-    }
-    
-    // Recupera dados básicos
+    if (current_state.map_entity != NULL) free(current_state.map_entity);
+    if (current_state.map_background != NULL) free(current_state.map_background);
+
     fread(&current_state.tick, sizeof(size_t), 1, f);
     fread(&current_state.map_length_x, sizeof(size_t), 1, f);
     fread(&current_state.map_length_y, sizeof(size_t), 1, f);
+    fread(&current_state.seed, sizeof(uint64_t), 1, f);    // seed do mundo
     fread(&current_stats, sizeof(WorldStatistics), 1, f);
-    
-    // Realoca a memória para o novo tamanho e joga os dados salvos nela
+
     size_t total_cells = current_state.map_length_x * current_state.map_length_y;
-    current_state.map = (char*)malloc(total_cells * sizeof(char));
-    fread(current_state.map, sizeof(char), total_cells, f);
+    current_state.map_entity = (char*)malloc(total_cells * sizeof(char));
+    current_state.map_background = (char*)malloc(total_cells * sizeof(char));
+    
+    fread(current_state.map_entity, sizeof(char), total_cells, f);
+    fread(current_state.map_background, sizeof(char), total_cells, f);
     
     fclose(f);
     return true;

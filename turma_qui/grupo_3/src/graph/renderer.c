@@ -18,14 +18,16 @@
 #define THEME_GREEN (Color){ 80, 250, 123, 255 }
 #define THEME_ROUNDNESS 0.3f
 #define THEME_FONT_SIZE 24
+#define THEME_FONT_SPACING 1.0f
 
 RenderTexture2D mapTexture = {0};
-Texture2D backgroundTexture = {0};
+Texture2D tilemapTexture = {0};
 Texture2D sheepTexture = {0};
 Texture2D wolfTexture = {0};
 Texture2D hunterTexture = {0};
 Texture2D treeTexture = {0};
 Texture2D rockTexture = {0};
+Font font = {0};
 
 float status_bar_height = 50.0f;
 float sym_options_bar_height = 75.0f;
@@ -44,6 +46,17 @@ static TextBox world_height_text_box = {0};
 static TextBox sheep_text_box = {0};
 static TextBox wolf_text_box = {0};
 static TextBox hunter_text_box = {0};
+
+static void label(const char *text, const int pos_x, const int pos_y) {
+    DrawTextEx(
+        font,
+        text,
+        (Vector2){(float) pos_x + 2, (float) pos_y},
+        THEME_FONT_SIZE,
+        THEME_FONT_SPACING,
+        THEME_FOREGROUND
+    );
+}
 
 static bool button(const Rectangle rect, const char *text, const bool disabled) {
     const Vector2 mouse = GetMousePosition();
@@ -64,14 +77,14 @@ static bool button(const Rectangle rect, const char *text, const bool disabled) 
         disabled ? ColorAlpha(THEME_FOREGROUND, 0.4f) : THEME_FOREGROUND
     );
 
-    const int textWidth = MeasureText(text, THEME_FONT_SIZE);
+    const int textWidth = MeasureText(text, THEME_FONT_SIZE) - 5;
 
     const Vector2 textPos = {
         rect.x + (rect.width - (float) textWidth) * 0.5f,
         rect.y + (rect.height - THEME_FONT_SIZE) * 0.5f
     };
 
-    DrawText(text, (int) textPos.x, (int) textPos.y, THEME_FONT_SIZE, THEME_FOREGROUND);
+    label(text, (int)textPos.x, (int)textPos.y);
 
     return clicked;
 }
@@ -127,8 +140,7 @@ static bool textbox(const Rectangle rect, const TextBox textbox) {
     BeginScissorMode((int) rect.x + padding, (int) rect.y,
                      (int) rect.width - padding * 2 + 5, (int) rect.height);
 
-    DrawText(textbox.value_buffer, (int) rect.x + padding - offsetX, textY,
-             THEME_FONT_SIZE, THEME_FOREGROUND);
+    label(textbox.value_buffer, (int) rect.x + padding - offsetX, textY);
 
     if (focused && ((int) (GetTime() * 2) % 2 == 0)) {
         const int cursorX = (int) rect.x + padding + MIN(textWidth, (int)maxTextWidth) + 2;
@@ -151,11 +163,52 @@ static void render_board(
     BeginTextureMode(texture);
     ClearBackground(BLANK);
 
-    char *map = world_state->map;
+    char *entities_map = world_state->map_entity;
+    char *tiles_map = world_state->map_background;
+
+
 
     for (size_t y = 0; y < map_height; y++) {
         for (size_t x = 0; x < map_width; x++) {
-            const char c = map[y * map_width + x];
+            const char c = tiles_map[y * map_width + x];
+
+            Rectangle src = { 0, 0, 16, 16 };
+            bool err = false;
+
+            switch (c) {
+                case 0: src.x = 16; src.y = 0; break;
+                case 1: src.x = 32; src.y = 0; break;
+                case 2: src.x = 32; src.y = 0; break;
+                case 3: src.x = 32; src.y = 16; break;
+                case 4: src.x = 48; src.y = 0; break;
+
+                default: err = true; break;
+            }
+
+            if (err) {
+                DrawRectangle((int)x * SPRITE_SIZE - SPRITE_OFFSET, (int)y * SPRITE_SIZE - SPRITE_OFFSET,
+                SPRITE_SIZE, SPRITE_SIZE, RED);
+            } else {
+                DrawTexturePro(
+                    tilemapTexture,
+                    src,
+                    (Rectangle){
+                        (float)x * SPRITE_SIZE,
+                        (float)y * SPRITE_SIZE,
+                        SPRITE_SIZE,
+                        SPRITE_SIZE
+                    },
+                    (Vector2){0, 0},
+                    0,
+                    WHITE
+                );
+            }
+        }
+    }
+
+    for (size_t y = 0; y < map_height; y++) {
+        for (size_t x = 0; x < map_width; x++) {
+            const char c = entities_map[y * map_width + x];
 
             switch (c) {
                 case ' ': break;
@@ -329,10 +382,10 @@ static void render_map_gen_options(
 
     float y_offset = 10;
 
-    DrawText("World Size:",
-             (int) map_gen_options.x + 10,
-             (int) (map_gen_options.y + y_offset),
-             THEME_FONT_SIZE, THEME_FOREGROUND
+    label(
+        "World Size:",
+        (int) map_gen_options.x + 10,
+        (int) (map_gen_options.y + y_offset)
     );
 
     y_offset += 30;
@@ -345,10 +398,10 @@ static void render_map_gen_options(
     };
     textbox(textBoxRect, world_width_text_box);
 
-    DrawText("x",
-             (int) textBoxRect.x + (int) textBoxRect.width + 13,
-             (int) textBoxRect.y + 11,
-             THEME_FONT_SIZE, THEME_FOREGROUND
+    label(
+        "x",
+        (int) textBoxRect.x + (int) textBoxRect.width + 13,
+        (int) textBoxRect.y + 11
     );
 
     textBoxRect = (Rectangle){
@@ -358,6 +411,38 @@ static void render_map_gen_options(
         50
     };
     textbox(textBoxRect, world_height_text_box);
+
+    y_offset += 70;
+
+    label(
+        "S%:",
+        (int) map_gen_options.x + 10,
+        (int) (map_gen_options.y + y_offset) + 14
+    );
+
+    textBoxRect = (Rectangle){
+        map_gen_options.x + 60,
+        map_gen_options.y + y_offset,
+        rect_width - 70,
+        50
+    };
+    textbox(textBoxRect, sheep_text_box);
+
+    y_offset += 70;
+
+    label(
+        "W%:",
+        (int) map_gen_options.x + 10,
+        (int) (map_gen_options.y + y_offset) + 14
+    );
+
+    textBoxRect = (Rectangle){
+        map_gen_options.x + 60,
+        map_gen_options.y + y_offset,
+        rect_width - 70,
+        50
+    };
+    textbox(textBoxRect, wolf_text_box);
 }
 
 static void render_ui(
@@ -415,7 +500,7 @@ void render_game_reset(const GameConfig game_config) {
         UnloadRenderTexture(mapTexture);
         mapTexture = (RenderTexture2D){0};
     }
-    if (backgroundTexture.id == 0) backgroundTexture = LoadTexture("assets/background.png");
+    if (tilemapTexture.id == 0) tilemapTexture = LoadTexture("assets/tilemap.png");
     if (sheepTexture.id == 0) sheepTexture = LoadTexture("assets/sheep.png");
     if (wolfTexture.id == 0) wolfTexture = LoadTexture("assets/wolf.png");
     if (hunterTexture.id == 0) hunterTexture = LoadTexture("assets/hunter.png");
@@ -429,6 +514,13 @@ void render_game_reset(const GameConfig game_config) {
     if (world_height_text_box.id == 0) {
         world_height_text_box = (TextBox){2, malloc(5), 5};
         memccpy(world_height_text_box.value_buffer, "32", (int) world_height_text_box.buffer_capacity, 3);
+    }
+
+    if (font.baseSize == 0) {
+        font = LoadFontEx(
+            "assets/adwaita-fonts/sans/AdwaitaSans-Regular.ttf",
+            48, NULL, 0
+        );
     }
 
     const size_t texture_width = game_config.map_width * SPRITE_SIZE;
@@ -450,4 +542,3 @@ void render_frame() {
     render_ui(&world_state, &world_stats);
     EndDrawing();
 }
-
