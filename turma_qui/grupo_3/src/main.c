@@ -3,6 +3,7 @@
 #include "graph/renderer.h"
 
 #include <stdio.h>
+#include <time.h>
 
 int delta = 0;
 
@@ -20,6 +21,10 @@ int main(int argc, char const *argv[])
     GameConfig config;
     config.map_width = 32;
     config.map_height = 32;
+    config.sheep_distribution = 0.12f;
+    config.wolf_distribution = 0.12f;
+    config.hunter_distribution = 0.12f;
+    config.seed = (uint64_t) time(NULL);;
 
     game_create_world(config);
     render_game_reset(config);

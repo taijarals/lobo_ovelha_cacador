@@ -11,8 +11,8 @@
 #define REPRODUCTION_RATE 3
 #define TERRAIN_WATER 4
 
-static WorldState current_state = {0, NULL, NULL, 0, 0, false, 0};
-static WorldStatistics current_stats = {0, 0, 0, 0, 0, 0, 0};
+static WorldState current_state = {0};
+static WorldStatistics current_stats = {0};
 
 // --- FUNÇÕES AUXILIARES ---
 
@@ -91,10 +91,6 @@ static void spawn_local(size_t center_x, size_t center_y, size_t count, char typ
 
 // --- IMPLEMENTAÇÃO DA API PÚBLICA (engine.h) ---
 
-void game_set_seed(uint64_t seed) {
-    current_state.seed = seed;
-}
-
 bool game_add_cell(size_t pos_x, size_t pos_y, char type) {
     return add_cell_internal(pos_x, pos_y, type);
 }
@@ -103,17 +99,17 @@ void game_create_world(GameConfig config) {
     if (current_state.map_entity != NULL) free(current_state.map_entity);
     if (current_state.map_background != NULL) free(current_state.map_background);
 
+    current_state.is_running = false;
+    current_state.tick = 0;
+
     current_state.map_length_x = config.map_width < 5 ? 5 : config.map_width;
     current_state.map_length_y = config.map_height < 5 ? 5 : config.map_height;
-    current_state.tick = 0;
-    current_state.is_running = false;
 
-    // Gera seed automaticamente se nenhuma foi definida via game_set_seed()
-    if (current_state.seed == 0) {
-        current_state.seed = (uint64_t)time(NULL);
-    }
+    current_state.sheep_distribution = config.sheep_distribution;
+    current_state.wolf_distribution = config.wolf_distribution;
+    current_state.hunter_distribution = config.hunter_distribution;
+    current_state.seed = config.seed;
 
-    // Toda a aleatoriedade da engine parte daqui, usando a seed do WorldState
     srand((unsigned int)current_state.seed);
 
     size_t total_cells = current_state.map_length_x * current_state.map_length_y;
@@ -123,12 +119,10 @@ void game_create_world(GameConfig config) {
     memset(current_state.map_entity, CELL_EMPTY, total_cells);
     memset(&current_stats, 0, sizeof(WorldStatistics));
 
-    // Geração procedural do Background usando perlin2d (0 - 4)
     for (size_t y = 0; y < current_state.map_length_y; y++) {
         for (size_t x = 0; x < current_state.map_length_x; x++) {
             float p = perlin2d((int)current_state.seed, (float)x, (float)y, 0.1f, 4);
-            
-            // Mapeia a saída do perlin para índices de 0 a 4
+
             int terrain = (int)(p * 5.0f);
             if (terrain < 0) terrain = 0;
             if (terrain > 4) terrain = 4;
@@ -137,11 +131,10 @@ void game_create_world(GameConfig config) {
         }
     }
 
-    // Proporções exigidas pelo professor
-    size_t qtd_fac1 = (size_t)(total_cells * 0.12); // Ovelhas
-    size_t qtd_fac2 = (size_t)(total_cells * 0.12); // Lobos
-    size_t qtd_fac3 = (size_t)(total_cells * 0.05); // Caçadores
-    size_t qtd_obs  = (size_t)(total_cells * 0.10); // Obstáculos
+    size_t qtd_fac1 = total_cells * current_state.sheep_distribution; // Ovelhas
+    size_t qtd_fac2 = total_cells * current_state.wolf_distribution; // Lobos
+    size_t qtd_fac3 = total_cells * config.hunter_distribution; // Caçadores
+    size_t qtd_obs  = total_cells * 0.10; // Obstáculos
 
     spawn_randomly(qtd_obs / 2, CELL_TREE);
     spawn_randomly(qtd_obs / 2, CELL_ROCK);
@@ -151,10 +144,15 @@ void game_create_world(GameConfig config) {
 }
 
 void game_reset(void) {
-    // Preserva a seed atual para recriar exatamente o mesmo mundo
     uint64_t saved_seed = current_state.seed;
-    GameConfig config = {current_state.map_length_x, current_state.map_length_y};
-    current_state.seed = saved_seed; // garante que game_create_world não gere uma nova
+    GameConfig config = {
+        .map_width = current_state.map_length_x,
+        .map_height = current_state.map_length_y,
+        .sheep_distribution = current_state.sheep_distribution,
+        .wolf_distribution = current_state.wolf_distribution,
+        .hunter_distribution = current_state.hunter_distribution,
+        .seed = saved_seed
+    };
     game_create_world(config);
 }
 
