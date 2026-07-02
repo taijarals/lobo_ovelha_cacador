@@ -1,13 +1,16 @@
 #include "graph/renderer.h"
+#include "engine/engine.h"
 
 #include <raylib.h>
 #include <string.h>
-#include "engine/engine.h"
 #include <math.h>
 #include <stdlib.h>
+#include <time.h>
+#include <stdio.h>
 
 #define SPRITE_SIZE 48
-#define SPRITE_OFFSET 16
+#define SPRITE_OFFSET_X 10
+#define SPRITE_OFFSET_Y 15
 
 #define THEME_BACKGROUND (Color){ 40, 42, 54, 255 }
 #define THEME_BACKGROUND_2 (Color){ 68, 71, 90, 255 }
@@ -46,6 +49,7 @@ static TextBox world_height_text_box = {0};
 static TextBox sheep_text_box = {0};
 static TextBox wolf_text_box = {0};
 static TextBox hunter_text_box = {0};
+static TextBox seed_text_box = {0};
 
 static void label(const char *text, const int pos_x, const int pos_y) {
     DrawTextEx(
@@ -157,15 +161,14 @@ static void render_board(
     const WorldState *world_state,
     const RenderTexture2D texture
 ) {
-    const size_t map_width = (int) world_state->map_length_x;
-    const size_t map_height = (int) world_state->map_length_y;
+    const size_t map_width = world_state->map_length_x;
+    const size_t map_height = world_state->map_length_y;
 
     BeginTextureMode(texture);
     ClearBackground(BLANK);
 
     char *entities_map = world_state->map_entity;
     char *tiles_map = world_state->map_background;
-
 
 
     for (size_t y = 0; y < map_height; y++) {
@@ -186,8 +189,10 @@ static void render_board(
             }
 
             if (err) {
-                DrawRectangle((int)x * SPRITE_SIZE - SPRITE_OFFSET, (int)y * SPRITE_SIZE - SPRITE_OFFSET,
-                SPRITE_SIZE, SPRITE_SIZE, RED);
+                DrawRectangle(
+                    (int)x * SPRITE_SIZE - SPRITE_OFFSET_X,
+                    (int)y * SPRITE_SIZE - SPRITE_OFFSET_Y,
+                    SPRITE_SIZE, SPRITE_SIZE, RED);
             } else {
                 DrawTexturePro(
                     tilemapTexture,
@@ -210,42 +215,34 @@ static void render_board(
         for (size_t x = 0; x < map_width; x++) {
             const char c = entities_map[y * map_width + x];
 
+            Texture2D selectedTexture;
+            bool ignore = false;
+            bool error = false;
+
             switch (c) {
-                case ' ': break;
-                case 'S':
-                    DrawTextureEx(sheepTexture,
-                                  (Vector2){x * SPRITE_SIZE - SPRITE_OFFSET, y * SPRITE_SIZE - SPRITE_OFFSET},
-                                  0.0f, 1.0f, WHITE);
-                    break;
+                case ' ': ignore = true; break;
 
-                case 'W':
-                    DrawTextureEx(wolfTexture,
-                                  (Vector2){x * SPRITE_SIZE - SPRITE_OFFSET, y * SPRITE_SIZE - SPRITE_OFFSET},
-                                  0.0f, 1.0f, WHITE);
-                    break;
+                case 'S': selectedTexture = sheepTexture; break;
+                case 'W': selectedTexture = wolfTexture; break;
+                case 'H': selectedTexture = hunterTexture; break;
+                case 'T': selectedTexture = treeTexture; break;
+                case 'R': selectedTexture = rockTexture; break;
 
-                case 'H':
-                    DrawTextureEx(hunterTexture,
-                                  (Vector2){x * SPRITE_SIZE - SPRITE_OFFSET, y * SPRITE_SIZE - SPRITE_OFFSET},
-                                  0.0f, 1.0f, WHITE);
-                    break;
+                default: error = true; break;
+            }
 
-                case 'T':
-                    DrawTextureEx(treeTexture,
-                                  (Vector2){x * SPRITE_SIZE - SPRITE_OFFSET, y * SPRITE_SIZE - SPRITE_OFFSET},
-                                  0.0f, 1.0f, WHITE);
-                    break;
-
-                case 'R':
-                    DrawTextureEx(rockTexture,
-                                  (Vector2){x * SPRITE_SIZE - SPRITE_OFFSET, y * SPRITE_SIZE - SPRITE_OFFSET},
-                                  0.0f, 1.0f, WHITE);
-                    break;
-
-                default:
-                    DrawRectangle(x * SPRITE_SIZE - SPRITE_OFFSET, y * SPRITE_SIZE - SPRITE_OFFSET,
-                                  SPRITE_SIZE, SPRITE_SIZE, RED);
-                    break;
+            if (error) {
+                DrawRectangle(
+                    x * SPRITE_SIZE,
+                    y * SPRITE_SIZE,
+                    SPRITE_SIZE, SPRITE_SIZE, RED);
+            }
+            else if (!ignore) {
+                DrawTextureEx(selectedTexture,
+                    (Vector2){
+                        (float)x * SPRITE_SIZE - SPRITE_OFFSET_X,
+                        (float)y * SPRITE_SIZE - SPRITE_OFFSET_Y},
+                    0.0f, 1.0f, WHITE);
             }
         }
     }
@@ -412,7 +409,7 @@ static void render_map_gen_options(
     };
     textbox(textBoxRect, world_height_text_box);
 
-    y_offset += 70;
+    y_offset += 60;
 
     label(
         "S%:",
@@ -421,14 +418,14 @@ static void render_map_gen_options(
     );
 
     textBoxRect = (Rectangle){
-        map_gen_options.x + 60,
+        map_gen_options.x + 70,
         map_gen_options.y + y_offset,
-        rect_width - 70,
+        rect_width - 80,
         50
     };
     textbox(textBoxRect, sheep_text_box);
 
-    y_offset += 70;
+    y_offset += 60;
 
     label(
         "W%:",
@@ -437,12 +434,72 @@ static void render_map_gen_options(
     );
 
     textBoxRect = (Rectangle){
-        map_gen_options.x + 60,
+        map_gen_options.x + 70,
         map_gen_options.y + y_offset,
-        rect_width - 70,
+        rect_width - 80,
         50
     };
     textbox(textBoxRect, wolf_text_box);
+
+    y_offset += 60;
+
+    label(
+        "H%:",
+        (int) map_gen_options.x + 10,
+        (int) (map_gen_options.y + y_offset) + 14
+    );
+
+    textBoxRect = (Rectangle){
+        map_gen_options.x + 70,
+        map_gen_options.y + y_offset,
+        rect_width - 80,
+        50
+    };
+    textbox(textBoxRect, hunter_text_box);
+
+
+    y_offset += 60;
+    label(
+        "World Seed:",
+        (int) map_gen_options.x + 10,
+        (int) (map_gen_options.y + y_offset)
+    );
+
+    y_offset += 30;
+    textBoxRect = (Rectangle){
+        map_gen_options.x + 10,
+        map_gen_options.y + y_offset,
+        rect_width - 20,
+        50
+    };
+    textbox(textBoxRect, seed_text_box);
+
+    y_offset += 70;
+    textBoxRect = (Rectangle){
+        map_gen_options.x + 10,
+        map_gen_options.y + y_offset,
+        rect_width - 20,
+        50
+    };
+    if (button(textBoxRect, "Create New", false)) {
+        GameConfig game_config;
+
+        game_config.map_width  = strtoul(world_width_text_box.value_buffer, NULL, 10);
+        game_config.map_height = strtoul(world_height_text_box.value_buffer, NULL, 10);
+
+        game_config.sheep_distribution  = strtof(sheep_text_box.value_buffer, NULL);
+        game_config.wolf_distribution   = strtof(wolf_text_box.value_buffer, NULL);
+        game_config.hunter_distribution = strtof(hunter_text_box.value_buffer, NULL);
+
+        if (seed_text_box.value_buffer[0] == '\0') {
+            game_config.seed = (uint64_t) time(NULL);
+        } else {
+            game_config.seed = (uint64_t) strtoull(seed_text_box.value_buffer, NULL, 10);
+        }
+
+        game_create_world(game_config);
+        render_game_reset(game_config);
+    }
 }
 
 static void render_ui(
@@ -507,14 +564,19 @@ void render_game_reset(const GameConfig game_config) {
     if (treeTexture.id == 0) treeTexture = LoadTexture("assets/tree.png");
     if (rockTexture.id == 0) rockTexture = LoadTexture("assets/rock.png");
 
-    if (world_width_text_box.id == 0) {
-        world_width_text_box = (TextBox){1, malloc(5), 5};
-        memccpy(world_width_text_box.value_buffer, "32", (int) world_width_text_box.buffer_capacity, 3);
-    }
-    if (world_height_text_box.id == 0) {
-        world_height_text_box = (TextBox){2, malloc(5), 5};
-        memccpy(world_height_text_box.value_buffer, "32", (int) world_height_text_box.buffer_capacity, 3);
-    }
+    if (world_width_text_box.id == 0) world_width_text_box = (TextBox){1, malloc(21), 21};
+    if (world_height_text_box.id == 0) world_height_text_box = (TextBox){2, malloc(21), 21};
+    if (sheep_text_box.id == 0) sheep_text_box = (TextBox){3, malloc(21), 21};
+    if (wolf_text_box.id == 0) wolf_text_box = (TextBox){4, malloc(21), 21};
+    if (hunter_text_box.id == 0) hunter_text_box = (TextBox){5, malloc(21), 21};
+    if (seed_text_box.id == 0) seed_text_box = (TextBox){6, malloc(21), 21};
+
+    snprintf(world_width_text_box.value_buffer, world_width_text_box.buffer_capacity, "%zu", game_config.map_width);
+    snprintf(world_height_text_box.value_buffer, world_height_text_box.buffer_capacity, "%zu", game_config.map_height);
+    snprintf(sheep_text_box.value_buffer, sheep_text_box.buffer_capacity, "%.2f", game_config.sheep_distribution);
+    snprintf(wolf_text_box.value_buffer, wolf_text_box.buffer_capacity, "%.2f", game_config.wolf_distribution);
+    snprintf(hunter_text_box.value_buffer, hunter_text_box.buffer_capacity, "%.2f", game_config.hunter_distribution);
+    snprintf(seed_text_box.value_buffer, seed_text_box.buffer_capacity, "%llu", (unsigned long long) game_config.seed);
 
     if (font.baseSize == 0) {
         font = LoadFontEx(

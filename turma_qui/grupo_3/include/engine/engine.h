@@ -13,6 +13,12 @@
 typedef struct {
     size_t map_width;
     size_t map_height;
+
+    float sheep_distribution;
+    float wolf_distribution;
+    float hunter_distribution;
+
+    uint64_t seed;
 } GameConfig;
 
 typedef struct {
@@ -34,6 +40,10 @@ typedef struct {
 
     size_t map_length_x;
     size_t map_length_y;
+
+    float sheep_distribution;
+    float wolf_distribution;
+    float hunter_distribution;
 
     bool is_running;
     uint64_t seed;
@@ -61,7 +71,5 @@ bool game_add_cell(size_t pos_x, size_t pos_y, char type);
 
 bool game_save(const char *path);
 bool game_load(const char *path);
-
-void game_set_seed(uint64_t seed);
 
 #endif /* SIMULATOR_H */
